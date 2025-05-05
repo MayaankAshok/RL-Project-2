@@ -10,7 +10,7 @@ class UAVEnv:
     Action: 2D orientation angles and thrust magnitude
     """
     
-    def __init__(self, max_steps=1000):
+    def __init__(self, max_steps=200):
         # Define the boundaries of the environment (only used for visualization)
         self.vis_range = 15.0  # Visualization range
         
@@ -18,8 +18,8 @@ class UAVEnv:
         self.window_x = 0.0  # x-coordinate of window center (origin)
         self.window_y = 0.0  # y-coordinate of window center (origin)
         self.window_z = 0.0  # z-coordinate of window center (origin)
-        self.window_width = 2.0
-        self.window_height = 2.0
+        self.window_width = 5.0   # Increased from 2.0 to 3.0
+        self.window_height = 5.0  # Increased from 2.0 to 3.0
         
         # UAV properties
         self.max_velocity = 2.0
@@ -85,7 +85,7 @@ class UAVEnv:
             return True
         
         # Check if the UAV is too far from the origin
-        if np.linalg.norm(pos) > 30.0:
+        if np.linalg.norm(pos) > 10.0:
             return True
         
         # Check if maximum steps reached
@@ -146,20 +146,49 @@ class UAVEnv:
         vel = self.state[3:]
         
         # Default reward (small negative reward to encourage faster completion)
-        reward = -0.1
+        reward = -0.1  # Small penalty for each step to encourage efficiency
         
-        # Reward for passing through the window
+        # Add proximity reward to encourage moving closer to the window
+        # Calculate distance to window center
+        window_center = np.array([0.0, 0.0, 0.0])  # Window is at origin
+        distance_to_window = np.linalg.norm(pos - window_center)
+        
+        # Smoother, more gradual reward for proximity
+        proximity_reward = 0.05 * (1.0 / (1.0 + distance_to_window))
+        reward += proximity_reward
+
+        if pos[2] < -1:
+            reward -=0.1
+        
+        
+        if (np.dot(vel,-pos) > 0):
+            # Add reward for moving toward the window (velocity in y-direction)
+            reward += 0.05
+        else:
+            # Add penalty for moving away from the window (velocity in y-direction)
+            reward -= 0.05
+
+
+
+        # Add reward for moving toward the window (velocity in y-direction)
+        # if pos[1] < 0:  # Only before passing through
+            # reward += 0.2 * vel[1]  # Reward for velocity toward the window
+        
+        # Moderate reward for passing through the window (not too large)
         if self._passed_through_window():
-            reward += 100.0  # Big reward for passing through window
+            reward += 20.0  # Reduced from 100 for more stable learning
         
         # Penalty for hitting the wall
         if self._hit_wall():
-            reward = -50.0  # Override with negative reward for hitting the wall
+            # reward = -10.0  # Reduced from -50 for more stable learning
+            reward = 0  # Reduced from -50 for more stable learning
         
-        # Penalty for being too far from the origin without passing through the window
-        if np.linalg.norm(pos) > 20.0 and not self._passed_through_window():
-            reward = -10.0  # Override with penalty for being too far without succeeding
+        # Penalty for being too far from the origin
+        if np.linalg.norm(pos) > 10.0 and not self._passed_through_window():
+            # reward = -10.0  # Reduced from -400 for more stable learning
+            reward = 0  # Reduced from -400 for more stable learning
         
+        # print(reward)
         return reward
     
     def _update_state(self, action):
@@ -197,7 +226,7 @@ class UAVEnv:
         
         # Add gravity effect (in negative z direction)
         acceleration[2] -= 0.5  # simplified gravity
-        
+        # print("acceleration", acceleration)
         # Update velocity using acceleration
         new_vel = vel + acceleration * self.dt
         
@@ -214,15 +243,20 @@ class UAVEnv:
     
     def reset(self):
         """Reset the environment to initial state"""
-        # Random initial position on the negative x side
-        x = np.random.uniform(-5.0, +5.0)  # Start on the negative x side
-        y = np.random.uniform(-5.0, -1.0)   # Near the window horizontally
-        z = np.random.uniform(-5.0, 1.0)   # Near the window vertically
-        
-        # Initial velocity close to zero
-        vx = np.random.uniform(-0.2, 0.2)
-        vy = np.random.uniform(-0.2, 0.2)
-        vz = np.random.uniform(-0.2, 0.2)
+        # Random initial position for better exploration
+        # x = np.random.uniform(-3.0, 3.0)  # Varied starting x position
+        # y = np.random.uniform(-5.0, -1.0)  # Some distance from the window
+        # z = np.random.uniform(-3.0, 3.0)  # Varied starting z position
+
+        x = np.random.uniform(-5, 5)  # Varied starting x position
+        y = np.random.uniform(-6, -3)  # Some distance from the window
+        z = np.random.uniform(-3, 1)  # Varied starting z position
+
+
+        # Initial velocity with slight bias toward window
+        vx = np.random.uniform(-0, 0)
+        vy = np.random.uniform(0.2, 0.3)  # Slight bias toward window
+        vz = np.random.uniform(-0, 0)
         
         self.state = np.array([x, y, z, vx, vy, vz])
         self.prev_state = self.state.copy()
