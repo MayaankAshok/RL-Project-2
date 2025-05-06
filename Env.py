@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import time
+import matplotlib
+import cv2
 
 class UAVEnv:
     """
@@ -10,7 +12,7 @@ class UAVEnv:
     Action: 2D orientation angles and thrust magnitude
     """
     
-    def __init__(self, max_steps=1000):
+    def __init__(self, max_steps=200):
         # Define the boundaries of the environment (only used for visualization)
         self.vis_range = 15.0  # Visualization range
         
@@ -18,8 +20,8 @@ class UAVEnv:
         self.window_x = 0.0  # x-coordinate of window center (origin)
         self.window_y = 0.0  # y-coordinate of window center (origin)
         self.window_z = 0.0  # z-coordinate of window center (origin)
-        self.window_width = 2.0
-        self.window_height = 2.0
+        self.window_width = 5.0   # Increased from 2.0 to 3.0
+        self.window_height = 5.0  # Increased from 2.0 to 3.0
         
         # UAV properties
         self.max_velocity = 2.0
@@ -51,6 +53,8 @@ class UAVEnv:
         # Visualization
         self.fig = None
         self.ax = None
+        self.writer = None
+        self.out_filename = "uav_navigation.mp4"
     
     def get_observation_space_info(self):
         """Return information about the observation space"""
@@ -85,7 +89,7 @@ class UAVEnv:
             return True
         
         # Check if the UAV is too far from the origin
-        if np.linalg.norm(pos) > 30.0:
+        if np.linalg.norm(pos) > 10.0:
             return True
         
         # Check if maximum steps reached
@@ -146,20 +150,49 @@ class UAVEnv:
         vel = self.state[3:]
         
         # Default reward (small negative reward to encourage faster completion)
-        reward = -0.1
+        reward = -0.1  # Small penalty for each step to encourage efficiency
         
-        # Reward for passing through the window
+        # Add proximity reward to encourage moving closer to the window
+        # Calculate distance to window center
+        window_center = np.array([0.0, 0.0, 0.0])  # Window is at origin
+        distance_to_window = np.linalg.norm(pos - window_center)
+        
+        # Smoother, more gradual reward for proximity
+        proximity_reward = 0.05 * (1.0 / (1.0 + distance_to_window))
+        reward += proximity_reward
+
+        if pos[2] < -1:
+            reward -=0.1
+        
+        
+        if (np.dot(vel,-pos) > 0):
+            # Add reward for moving toward the window (velocity in y-direction)
+            reward += 0.05
+        else:
+            # Add penalty for moving away from the window (velocity in y-direction)
+            reward -= 0.05
+
+
+
+        # Add reward for moving toward the window (velocity in y-direction)
+        if pos[1] < 0:  # Only before passing through
+            reward += 0.2 * vel[1]  # Reward for velocity toward the window
+        
+        # Moderate reward for passing through the window (not too large)
         if self._passed_through_window():
-            reward += 100.0  # Big reward for passing through window
+            reward += 20.0  # Reduced from 100 for more stable learning
         
         # Penalty for hitting the wall
         if self._hit_wall():
-            reward = -50.0  # Override with negative reward for hitting the wall
+            # reward = -10.0  # Reduced from -50 for more stable learning
+            reward = 0  # Reduced from -50 for more stable learning
         
-        # Penalty for being too far from the origin without passing through the window
-        if np.linalg.norm(pos) > 20.0 and not self._passed_through_window():
-            reward = -10.0  # Override with penalty for being too far without succeeding
+        # Penalty for being too far from the origin
+        if np.linalg.norm(pos) > 10.0 and not self._passed_through_window():
+            # reward = -10.0  # Reduced from -400 for more stable learning
+            reward = 0  # Reduced from -400 for more stable learning
         
+        # print(reward)
         return reward
     
     def _update_state(self, action):
@@ -197,7 +230,7 @@ class UAVEnv:
         
         # Add gravity effect (in negative z direction)
         acceleration[2] -= 0.5  # simplified gravity
-        
+        # print("acceleration", acceleration)
         # Update velocity using acceleration
         new_vel = vel + acceleration * self.dt
         
@@ -214,15 +247,20 @@ class UAVEnv:
     
     def reset(self):
         """Reset the environment to initial state"""
-        # Random initial position on the negative x side
-        x = np.random.uniform(-5.0, +5.0)  # Start on the negative x side
-        y = np.random.uniform(-5.0, -1.0)   # Near the window horizontally
-        z = np.random.uniform(-5.0, 1.0)   # Near the window vertically
-        
-        # Initial velocity close to zero
-        vx = np.random.uniform(-0.2, 0.2)
-        vy = np.random.uniform(-0.2, 0.2)
-        vz = np.random.uniform(-0.2, 0.2)
+        # Random initial position for better exploration
+        # x = np.random.uniform(-3.0, 3.0)  # Varied starting x position
+        # y = np.random.uniform(-5.0, -1.0)  # Some distance from the window
+        # z = np.random.uniform(-3.0, 3.0)  # Varied starting z position
+
+        x = np.random.uniform(-5, 5)  # Varied starting x position
+        y = np.random.uniform(-6, -3)  # Some distance from the window
+        z = np.random.uniform(-3, 1)  # Varied starting z position
+
+
+        # Initial velocity with slight bias toward window
+        vx = np.random.uniform(-0, 0)
+        vy = np.random.uniform(0.2, 0.3)  # Slight bias toward window
+        vz = np.random.uniform(-0, 0)
         
         self.state = np.array([x, y, z, vx, vy, vz])
         self.prev_state = self.state.copy()
@@ -257,69 +295,92 @@ class UAVEnv:
         return self._get_obs(), reward, done, info
     
     def render(self, mode='human'):
-        """Render the environment"""
+        """
+        Render the environment.
+        mode: 'human' (default) - display using matplotlib
+            'rgb_array' - write frame directly to video
+        """
+        # Ensure proper backend for offscreen
+        if mode == 'rgb_array':
+            import matplotlib
+            matplotlib.use('Agg')
+
+        # Initialize figure on first call
         if self.fig is None:
-            plt.ion()
             self.fig = plt.figure(figsize=(10, 8))
             self.ax = self.fig.add_subplot(111, projection='3d')
-        
+            if mode == 'human':
+                plt.ion()
+
+        # Draw scene
         self.ax.clear()
-        
-        # Set fixed axis limits for better visualization
         self.ax.set_xlim([-15.0, 15.0])
         self.ax.set_ylim([-10.0, 1.0])
         self.ax.set_zlim([-15.0, 15.0])
-        
-        # Plot UAV position
         pos = self.state[:3]
-        self.ax.scatter(pos[0], pos[1], pos[2], color='blue', s=100, label='UAV')
-        
-        # Plot window in the XZ plane (y=0)
+        self.ax.scatter(*pos, color='blue', s=100, label='UAV')
+
+        # Window frame
         window_corners = [
-            [-self.window_width/2, 0, -self.window_height/2],  # bottom left
-            [self.window_width/2, 0, -self.window_height/2],   # bottom right
-            [self.window_width/2, 0, self.window_height/2],    # top right
-            [-self.window_width/2, 0, self.window_height/2],   # top left
-            [-self.window_width/2, 0, -self.window_height/2]   # back to bottom left
+            [-self.window_width/2, 0, -self.window_height/2],
+            [ self.window_width/2, 0, -self.window_height/2],
+            [ self.window_width/2, 0,  self.window_height/2],
+            [-self.window_width/2, 0,  self.window_height/2],
+            [-self.window_width/2, 0, -self.window_height/2]
         ]
         window_corners = np.array(window_corners)
-        self.ax.plot(window_corners[:, 0], window_corners[:, 1], window_corners[:, 2], 'r-', linewidth=2, label='Window')
-        
-        # Plot the wall with a transparent surface (the XZ plane at y=0)
-        wall_size = 20.0  # Fixed size of the wall for visualization
+        self.ax.plot(window_corners[:,0], window_corners[:,1], window_corners[:,2], 'r-', linewidth=2, label='Window')
+
+        # Wall surface
+        wall_size = 20.0
         x_plane = np.linspace(-wall_size/2, wall_size/2, 20)
         z_plane = np.linspace(-wall_size/2, wall_size/2, 20)
         X, Z = np.meshgrid(x_plane, z_plane)
-        Y = np.zeros_like(X)  # y=0 plane
-        
-        # Create the wall surface
-        wall = self.ax.plot_surface(X, Y, Z, alpha=0.3, color='gray', 
-                            rstride=1, cstride=1, linewidth=0, antialiased=False)
-        
-        # Create a second surface for the window opening (using a different color)
-        window_x_min = -self.window_width/2
-        window_x_max = self.window_width/2
-        window_z_min = -self.window_height/2
-        window_z_max = self.window_height/2
-        
-        # Draw the window opening with a different color
-        window_X, window_Z = np.meshgrid(
-            np.linspace(window_x_min, window_x_max, 5),
-            np.linspace(window_z_min, window_z_max, 5)
-        )
-        window_Y = np.zeros_like(window_X)  # y=0 plane
-        self.ax.plot_surface(window_X, window_Y, window_Z, alpha=0.1, color='white', 
-                         rstride=1, cstride=1, linewidth=0, antialiased=False)
-        
-        # Labels
+        Y = np.zeros_like(X)
+        self.ax.plot_surface(X, Y, Z, alpha=0.3, color='gray', rstride=1, cstride=1, linewidth=0)
+
+        # Window opening surface
+        wx1, wx2 = -self.window_width/2, self.window_width/2
+        wz1, wz2 = -self.window_height/2, self.window_height/2
+        WX, WZ = np.meshgrid(np.linspace(wx1, wx2, 5), np.linspace(wz1, wz2, 5))
+        WY = np.zeros_like(WX)
+        self.ax.plot_surface(WX, WY, WZ, alpha=0.1, color='white', rstride=1, cstride=1, linewidth=0)
+
+        # Labels and title
         self.ax.set_xlabel('X')
         self.ax.set_ylabel('Y')
         self.ax.set_zlabel('Z')
         self.ax.set_title('UAV Navigation Through Window')
         self.ax.legend()
-        
-        plt.draw()
-        plt.pause(0.01)
+
+        # Draw canvas
+        self.fig.canvas.draw()
+
+        if mode == 'human':
+            plt.pause(0.01)
+
+        elif mode == 'rgb_array':
+            # Grab raw RGB buffer
+            buf = self.fig.canvas.tostring_argb()
+            h, w = self.fig.canvas.get_width_height()[::-1]
+            frame = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 4)
+            frame = frame[:, :, [1, 2, 3, 0]]  
+            frame = frame[:, :, :3]  
+
+            # Lazy-init writer when size known
+            if self.writer is None:
+            # Use MPEG-4 codec which is more likely available
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # fallback codec
+                self.writer = cv2.VideoWriter(self.out_filename, fourcc, 30, (w, h))
+                if not self.writer.isOpened():
+                    raise RuntimeError(f"Could not open VideoWriter for {self.out_filename} at {w}x{h}; check available codecs")
+
+            # Write BGR frame
+            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            self.writer.write(bgr)
+
+    # End of updated render method
+
         
     def close(self):
         """Close the environment"""

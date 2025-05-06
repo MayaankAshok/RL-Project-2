@@ -180,7 +180,7 @@ def plot_trajectory(trajectory, episode_num, success):
     ax.legend()
     
     # Save the figure
-    plt.savefig(f'episode_{episode_num+1}_trajectory.png')
+    plt.savefig(f'plots/episode_{episode_num+1}_trajectory.png')
     plt.close(fig)
 
 def plot_performance(rewards, steps):
@@ -206,7 +206,7 @@ def plot_performance(rewards, steps):
     plt.grid(True)
     
     plt.tight_layout()
-    plt.savefig('performance_metrics.png')
+    plt.savefig('/plots/performance_metrics.png')
     plt.show()
 
 if __name__ == "__main__":
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         plt.grid(True)
         
         plt.tight_layout()
-        plt.savefig('agents_comparison.png')
+        plt.savefig('/plots/agents_comparison.png')
         plt.show(block=True)  # Block execution until window is closed
     
     # Close environment
