@@ -11,6 +11,7 @@ args = argparse.ArgumentParser()
 args.add_argument('--agent', type=str, default='SAC', help='Agent name')
 args.add_argument('--num_episodes', type=int, default=100, help='Number of episodes to run')
 args.add_argument('--render', type=str, default="rgb_array", help='Render the environment')
+args.add_argument('--reward', type=str, default="arctan", help='type of proximity reward function')
 args = args.parse_args()
 
 if args.agent == 'SAC':
@@ -166,7 +167,7 @@ def plot_performance(rewards, steps):
     # plt.show()  # Disabled to avoid UserWarning: FigureCanvasAgg is non-interactive
 
 if __name__ == "__main__":
-    env = UAVEnv(500)
+    env = UAVEnv(500,reward_type=args.reward)
     env.seed(42)
     np.random.seed(42)
     os.makedirs(f'plots/{run_time_date}', exist_ok=True)

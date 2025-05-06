@@ -12,7 +12,7 @@ class UAVEnv:
     Action: 2D orientation angles and thrust magnitude
     """
     
-    def __init__(self, max_steps=200):
+    def __init__(self, max_steps=200,reward_type="inv"):
         # Define the boundaries of the environment (only used for visualization)
         self.vis_range = 15.0  # Visualization range
         
@@ -23,7 +23,8 @@ class UAVEnv:
         self.window_width = 3.0   # Increased from 2.0 to 3.0
         self.window_height = 3.0  # Increased from 2.0 to 3.0
         
-        self.proximity_reward_type = "arctan"  # "inv" or "arctan" or "none"
+        self.proximity_reward_type = reward_type
+        assert self.proximity_reward_type in ["none","inv","arctan"] # "inv" or "arctan" or "none"
 
         # UAV properties
         self.max_velocity = 2.0
