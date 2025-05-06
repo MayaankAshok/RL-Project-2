@@ -189,6 +189,12 @@ class UAVGymEnv(gym.Env):
         """
         return self.uav_env._hit_wall()
 
+    def _passed_through_window(self):
+        """
+        Check if the UAV passed through the window.
+        """
+        return self.uav_env._passed_through_window()
+
 
 # Test the environment if this file is run directly
 if __name__ == "__main__":

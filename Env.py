@@ -18,9 +18,11 @@ class UAVEnv:
         self.window_x = 0.0  # x-coordinate of window center (origin)
         self.window_y = 0.0  # y-coordinate of window center (origin)
         self.window_z = 0.0  # z-coordinate of window center (origin)
-        self.window_width = 5.0   # Increased from 2.0 to 3.0
-        self.window_height = 5.0  # Increased from 2.0 to 3.0
+        self.window_width = 3.0   # Increased from 2.0 to 3.0
+        self.window_height = 3.0  # Increased from 2.0 to 3.0
         
+        self.proximity_reward_type = "arctan"  # "inv" or "arctan" or "none"
+
         # UAV properties
         self.max_velocity = 2.0
         self.max_acceleration = 1.0
@@ -154,25 +156,15 @@ class UAVEnv:
         distance_to_window = np.linalg.norm(pos - window_center)
         
         # Smoother, more gradual reward for proximity
-        proximity_reward = 0.05 * (1.0 / (1.0 + distance_to_window))
-        reward += proximity_reward
+        proximity_reward1 = 0.05 * (1.0 / (1.0 + distance_to_window))
+        proximity_reward2 = 0.05 * (1- np.arctan(distance_to_window) )
 
-        if pos[2] < -1:
-            reward -=0.1
-        
-        
-        if (np.dot(vel,-pos) > 0):
-            # Add reward for moving toward the window (velocity in y-direction)
-            reward += 0.05
-        else:
-            # Add penalty for moving away from the window (velocity in y-direction)
-            reward -= 0.05
+        if self.proximity_reward_type == "inv":
+            reward += proximity_reward1
+        elif self.proximity_reward_type == "arctan":
+            reward += proximity_reward2
+        # reward += proximity_reward
 
-
-
-        # Add reward for moving toward the window (velocity in y-direction)
-        # if pos[1] < 0:  # Only before passing through
-            # reward += 0.2 * vel[1]  # Reward for velocity toward the window
         
         # Moderate reward for passing through the window (not too large)
         if self._passed_through_window():
@@ -180,13 +172,13 @@ class UAVEnv:
         
         # Penalty for hitting the wall
         if self._hit_wall():
-            # reward = -10.0  # Reduced from -50 for more stable learning
-            reward = 0  # Reduced from -50 for more stable learning
+            reward = -10.0  # Reduced from -50 for more stable learning
+            # reward = 0  # Reduced from -50 for more stable learning
         
         # Penalty for being too far from the origin
         if np.linalg.norm(pos) > 10.0 and not self._passed_through_window():
-            # reward = -10.0  # Reduced from -400 for more stable learning
-            reward = 0  # Reduced from -400 for more stable learning
+            reward = -10.0  # Reduced from -400 for more stable learning
+            # reward = 0  # Reduced from -400 for more stable learning
         
         # print(reward)
         return reward
@@ -248,9 +240,9 @@ class UAVEnv:
         # y = np.random.uniform(-5.0, -1.0)  # Some distance from the window
         # z = np.random.uniform(-3.0, 3.0)  # Varied starting z position
 
-        x = np.random.uniform(-5, 5)  # Varied starting x position
-        y = np.random.uniform(-6, -3)  # Some distance from the window
-        z = np.random.uniform(-3, 1)  # Varied starting z position
+        x = np.random.uniform(-6, 4)  # Varied starting x position
+        y = np.random.uniform(-6, -1.5)  # Some distance from the window
+        z = np.random.uniform(-4, 1)  # Varied starting z position
 
 
         # Initial velocity with slight bias toward window
