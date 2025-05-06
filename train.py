@@ -132,9 +132,9 @@ def plot_trajectory(trajectory, episode_num, success):
     
     ax.legend()
     
-    # Ensure the f'plots/{run_time_date}' directory exists
-    os.makedirs(f'plots/{run_time_date}', exist_ok=True)
-    plt.savefig(f'plots/{run_time_date}/episode_{episode_num+1}_trajectory.png')
+    # Ensure the f'plots/sac/{run_time_date}' directory exists
+    os.makedirs(f'plots/sac/{run_time_date}', exist_ok=True)
+    plt.savefig(f'plots/sac/{run_time_date}/episode_{episode_num+1}_trajectory.png')
     plt.close(fig)
 
 def plot_performance(rewards, steps):
@@ -161,15 +161,15 @@ def plot_performance(rewards, steps):
     plt.grid(True)
     
     plt.tight_layout()
-    # Ensure the f'plots/{run_time_date}' directory exists
-    os.makedirs(f'plots/{run_time_date}', exist_ok=True)
-    plt.savefig(f'plots/{run_time_date}/performance_metrics.png')
+    # Ensure the f'plots/sac/{run_time_date}' directory exists
+    os.makedirs(f'plots/sac/{run_time_date}', exist_ok=True)
+    plt.savefig(f'plots/sac/{run_time_date}/performance_metrics.png')
     # plt.show()  # Disabled to avoid UserWarning: FigureCanvasAgg is non-interactive
 
 if __name__ == "__main__":
     env = UAVEnv(500,reward_type=args.reward)
     env.seed(42)
     np.random.seed(42)
-    os.makedirs(f'plots/{run_time_date}', exist_ok=True)
+    os.makedirs(f'plots/sac/{run_time_date}', exist_ok=True)
     run_episodes(SACAgent, env, num_episodes=args.num_episodes, render=args.render)
     env.close()
